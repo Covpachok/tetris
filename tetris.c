@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "tetris.h"
+#include "etc.h"
 
 enum {
 	shapes_count 	= 7,
@@ -21,10 +22,6 @@ enum {
     right = 1,
 };
 
-enum {
-	key_escape  = 27
-};
-
 typedef enum {
     crd_y = 0,
     crd_x = 1
@@ -38,14 +35,14 @@ typedef struct {
 	coord_type pos;
 	int rotation;
 	int shape;
-} tetrimino_type;
+} tetromino_type;
 
-typedef int scr_type[fh][fw];
+typedef int scr_type[fld_h][fld_w];
 
 #if 0
 typedef struct {
-    int coord[fh][fw];
-    int shape[fh][fw];
+    int coord[fld_h][fld_w];
+    int shape[fld_h][fld_w];
 } scr_type;
 #endif
 
@@ -94,9 +91,9 @@ const int 	tetr_shapes[shapes_count][rotation_count][blocks_count][2] = {
 	 {{0, 1}, {0, 2}, {1, 1}, {1, 2}}}
 };
 
-const int delay_times[] = { 35, 30, 25, 20, 15, 10, 5, 2};
+const int delay_times[] = { 70, 60, 50, 40, 30, 20, 10, 5};
 
-void tetr_colors_init()
+static void tetr_colors_init()
 {
 	init_pair(shape_i, COLOR_WHITE, COLOR_CYAN);
 	init_pair(shape_l, COLOR_WHITE, COLOR_YELLOW);
@@ -107,7 +104,7 @@ void tetr_colors_init()
 	init_pair(shape_o, COLOR_BLACK, COLOR_WHITE);
 }
 
-void tetr_init(tetrimino_type *t, int shape)
+static void tetr_init(tetromino_type *t, int shape)
 {
 	t->shape = shape; 
 	t->rotation = 0; 
@@ -115,36 +112,36 @@ void tetr_init(tetrimino_type *t, int shape)
 	t->pos.y = 1;
 }
 
-int get_tetr_block_crd(tetrimino_type t, int block, crdcnst crd)
+static int get_tetr_block_crd(tetromino_type t, int block, crdcnst crd)
 {
     return tetr_shapes[t.shape][t.rotation][block][crd] + 
         (crd == crd_y ? t.pos.y : t.pos.x);
 }
 
-int get_tetr_scr_crd(tetrimino_type t, int block, crdcnst crd)
+static int get_tetr_scr_crd(tetromino_type t, int block, crdcnst crd)
 {
     return get_tetr_block_crd(t, block, crd)*(crd+1)+crd;
 }
 
-void put_block_at_field(tetrimino_type t, scr_type *f, int block)
+static void put_block_at_field(tetromino_type t, scr_type *f, int block)
 {
     (*f)[get_tetr_block_crd(t, block, crd_y)-1]
         [get_tetr_block_crd(t, block, crd_x)] = t.shape+1;
 }
 
-void write_block(WINDOW *win, int y, int x, int shape)
+static void write_block(WINDOW *win, int y, int x, int shape)
 {
     wattrset(win, COLOR_PAIR(shape));
     mvwaddstr(win, y, x, tetr_piece);
     wattroff(win, COLOR_PAIR(shape));
 }
 
-void erase_block(WINDOW *win, int y, int x)
+static void erase_block(WINDOW *win, int y, int x)
 {
     mvwaddstr(win, y, x, "  ");
 }
 
-void write_tetr(WINDOW *win, tetrimino_type t)
+static void write_tetr(WINDOW *win, tetromino_type t)
 {
 	int i;
     for(i = 0; i < blocks_count; i++) {
@@ -153,7 +150,7 @@ void write_tetr(WINDOW *win, tetrimino_type t)
     }
 }
 
-void erase_tetr(WINDOW *win, tetrimino_type t)
+static void erase_tetr(WINDOW *win, tetromino_type t)
 {
 	int i;
 	for(i = 0; i < blocks_count; i++) {
@@ -162,7 +159,7 @@ void erase_tetr(WINDOW *win, tetrimino_type t)
 	}
 }
 
-void save_at_field(tetrimino_type t, scr_type *f)
+static void save_at_field(tetromino_type t, scr_type *f)
 {
 #ifdef DEBUG
     FILE *file;
@@ -174,8 +171,8 @@ void save_at_field(tetrimino_type t, scr_type *f)
     }
 #ifdef DEBUG
     file = fopen("debug.txt", "w");
-    for(i = 0; i < fh; i++) {
-        for(j = 0; j < fw; j++)
+    for(i = 0; i < fld_h; i++) {
+        for(j = 0; j < fld_w; j++)
             fprintf(file, "%d", (*f)[i][j]);
         fprintf(file, "\n");
     }
@@ -183,24 +180,24 @@ void save_at_field(tetrimino_type t, scr_type *f)
 #endif
 }
 
-int is_tetr_fit(const tetrimino_type t, scr_type f)
+static int is_tetr_fit(const tetromino_type t, scr_type f)
 {
     int i, ty, tx;
     for(i = 0; i < blocks_count; i++) {
-        ty = get_tetr_block_crd(t, i, crd_y);
+        ty = get_tetr_block_crd(t, i, crd_y)-1;
         tx = get_tetr_block_crd(t, i, crd_x);
 #ifdef DEBUG
         mvprintw(4+i, 0, "itf ty=%02d tx=%02d", ty, tx);
 #endif
         if((f[ty][tx] != 0) ||
             (ty < 0)  || (tx < 0) ||
-            (ty > fh) || (tx >= fw))
+            (ty > fld_h) || (tx >= fld_w))
             return 0;
     }
     return 1;
 }
 
-int try_to_fit(tetrimino_type *t, scr_type f)
+static int try_to_fit(tetromino_type *t, scr_type f)
 {
     t->pos.x--;
     if(is_tetr_fit(*t, f)) {
@@ -216,22 +213,22 @@ int try_to_fit(tetrimino_type *t, scr_type f)
     return 0;
 }
 
-int is_tetr_on_something(const tetrimino_type t, scr_type f)
+static int is_tetr_on_something(const tetromino_type t, scr_type f)
 {
     int i, ty, tx;
     for(i = 0; i < blocks_count; i++) {
-        ty = get_tetr_block_crd(t, i, crd_y);
+        ty = get_tetr_block_crd(t, i, crd_y)-1;
         tx = get_tetr_block_crd(t, i, crd_x);
 #ifdef DEBUG
         mvprintw(8+i, 0, "itos ty=%02d tx=%02d", ty, tx);
 #endif
-        if((ty > fh) || (f[ty-1][tx] != 0))
+        if((ty >= fld_h) || (f[ty][tx] != 0))
             return 1;
     }
     return 0;
 }
 
-int tetr_fall(tetrimino_type *t, scr_type f)
+static int tetr_fall(tetromino_type *t, scr_type f)
 {
 	t->pos.y++;
     if(is_tetr_on_something(*t, f)) {
@@ -241,7 +238,7 @@ int tetr_fall(tetrimino_type *t, scr_type f)
     return 0;
 }
 
-void tetr_rotate(tetrimino_type *t, scr_type f)
+static void tetr_rotate(tetromino_type *t, scr_type f)
 {
 	t->rotation++;
 
@@ -258,7 +255,7 @@ void tetr_rotate(tetrimino_type *t, scr_type f)
     }
 }
 
-void tetr_move(tetrimino_type *t, scr_type f, int dir)
+static void tetr_move(tetromino_type *t, scr_type f, int dir)
 {
     t->pos.x += dir;
     if(!is_tetr_fit(*t, f)) {
@@ -266,20 +263,20 @@ void tetr_move(tetrimino_type *t, scr_type f, int dir)
     }
 }
 
-int is_line_full(int line[fw])
+static int is_line_full(int line[fld_w])
 {
     int i, n = 0;
-    for(i = 0; i < fw; i++) {
+    for(i = 0; i < fld_w; i++) {
         n += line[i] != 0;
     }
-    return n == fw;
+    return n == fld_w;
 }
 
-void scr_rewrite(WINDOW *win, scr_type f)
+static void scr_rewrite(WINDOW *win, scr_type f)
 {
     int i, j;
-    for(i = 0; i < fh; i++) {
-        for(j = 0; j < fw; j++) {
+    for(i = 0; i < fld_h; i++) {
+        for(j = 0; j < fld_w; j++) {
             if(f[i][j] != 0)
                 write_block(win, i+1, j*2+1, f[i][j]);
             else
@@ -288,27 +285,27 @@ void scr_rewrite(WINDOW *win, scr_type f)
     }
 }
 
-void scr_remove_line(scr_type *f, int n)
+static void scr_remove_line(scr_type *f, int n)
 {
     int i;
-    for(i = 0; i < fw; i++)
+    for(i = 0; i < fld_w; i++)
         (*f)[n][i] = 0;
 }
 
-void scr_shift(scr_type *f, int n)
+static void scr_shift(scr_type *f, int n)
 {
     int i, j;
 
     for(i = n; i > 1; i--)
-        for(j = 0; j < fw; j++)
+        for(j = 0; j < fld_w; j++)
             (*f)[i][j] = (*f)[i-1][j];
 }
 
-int check_scr_lines(scr_type *f)
+static int check_scr_lines(scr_type *f)
 {
     int i, n = 0;
 
-    for(i = 0; i < fh; i++) {
+    for(i = 0; i < fld_h; i++) {
         if(is_line_full((*f)[i])) {
             n++;
             scr_remove_line(f, i);
@@ -318,15 +315,15 @@ int check_scr_lines(scr_type *f)
     return n;
 }
 
-void init_game_field(scr_type *f)
+static void init_game_field(scr_type *f)
 {
     int i, j;
-    for(i = 0; i < fh; i++)
-        for(j = 0; j < fw; j++) 
+    for(i = 0; i < fld_h; i++)
+        for(j = 0; j < fld_w; j++) 
             (*f)[i][j] = 0;
 }
 
-void init_tetris_win(WINDOW **win, int sm_h, int sm_w)
+static void init_tetris_win(WINDOW **win, int sm_h, int sm_w)
 {
     *win = newwin(border_h, border_w,
             (sm_h - border_h)/2,
@@ -335,31 +332,66 @@ void init_tetris_win(WINDOW **win, int sm_h, int sm_w)
     wrefresh(*win);
 }  
 
-void fall_delay(int *n)
+static void fall_delay(int *n)
 {
-    napms(20);
+    napms(10);
     (*n)++;
 }
 
-int is_game_lost(scr_type f)
+static int is_game_lost(scr_type f)
 {
     int i;
-    for(i = 0; i < fw; i++) {
+    for(i = 0; i < fld_w; i++) {
          if(f[0][i] != 0 || f[1][i] != 0)
              return 1;
     }
     return 0;
 }    
 
+static void new_tetr(tetromino_type *ct, tetromino_type *nt)
+{
+	*ct = *nt;
+	tetr_init(nt, rand()%shapes_count);
+}
+
+static int score_for_flines(scr_type *f, long *score, int smod)
+{
+	int flines;
+	flines = check_scr_lines(f);
+	*score += flines == 4 ?
+		flines*2000*smod :
+		flines*500*smod;
+	if(flines > 0)
+		return 1;
+	else
+		return 0;
+}
+
+static void score_for_falling(long *score, int df, int smod, int *dcount)
+{
+	*score += (df == 1 ? 7*smod : 0);
+	*dcount = 0;
+}
+
+static void level_inc(long score, int *smod, int *lvl)
+{
+	int n = (*lvl)*(*lvl);
+	if(score >= 1000*(10*n+1)) {
+		*smod += n;
+		(*lvl)++;
+	} 
+}
+
 void tetris_game()
 {
 	WINDOW *win;
-	tetrimino_type curr_tetr, next_tetr;
+	tetromino_type curr_tetr, next_tetr;
     scr_type field;
 	int key, sm_h, sm_w, dcount,
-        dflag, flines, level, score_mod;
+        dflag, level, score_mod;
     long score;
 
+	/* initializing variables */
     getmaxyx(stdscr, sm_h, sm_w);
     init_tetris_win(&win, sm_h, sm_w);
 
@@ -377,8 +409,11 @@ void tetris_game()
     score = 0;
     score_mod = 1;
     level = 0;
+
+	/* main game loop */
     while((key = getch()) != key_escape) {
         erase_tetr(win, curr_tetr);
+
         switch(key) {
             case 'r':
                 tetr_rotate(&curr_tetr, field);
@@ -390,78 +425,60 @@ void tetris_game()
                 tetr_move(&curr_tetr, field, right);
                 break;
             case KEY_DOWN:
+				/* delay flag 
+				 * if set then tetromino
+				 * falls without delay.
+				 */
                 dflag = dflag == 0 ? 1 : 0;
                 break;
+			default:
+				break;
         }
+                   
+		/* tetromino falling */
         fall_delay(&dcount);
         if(dcount == delay_times[level] || dflag) {
             if(tetr_fall(&curr_tetr, field)) {
                 save_at_field(curr_tetr, &field);
                 write_tetr(win, curr_tetr);
-                curr_tetr = next_tetr;
-                tetr_init(&next_tetr, rand()%shapes_count);
-                flines = check_scr_lines(&field);
-                score += flines == 4 ?
-                    flines*2000*score_mod :
-                    flines*500*score_mod;
-                if(flines > 0) {
-                    scr_rewrite(win, field);
-                };
+                
+				new_tetr(&curr_tetr, &next_tetr);
+
+				/* score system */
+				if(score_for_flines(&field, &score, score_mod) == 1)
+					scr_rewrite(win, field);
                 dflag = 0;
             }
-            score += dflag == 1 ? 7*score_mod : 0;
-            dcount = 0;
+			score_for_falling(&score, dflag, score_mod, &dcount);
         }
+
 #ifdef DEBUG
         mvprintw(0, 0, "y=%d x=%d", curr_tetr.pos.y, curr_tetr.pos.x);
         mvprintw(1, 0, "rot=%d", curr_tetr.rotation);
         mvprintw(2, 0, "shape=%d", curr_tetr.shape);
         mvprintw(3, 0, "delay count=%02d", dcount);
 #endif
+
         mvprintw(0, (sm_w-16)/2, "score=%010d", score);
         mvprintw(1, (sm_w-6)/2, "level=%d", level);
+
         write_tetr(win, curr_tetr);
         refresh();
         wrefresh(win);
+
         if(is_game_lost(field)) {
-            curr_tetr = next_tetr;
-            write_tetr(win, curr_tetr);
+			new_tetr(&curr_tetr, &next_tetr);
+
+			write_tetr(win, curr_tetr);
             refresh();
             wrefresh(win);
+
             napms(500);
             quit(0);
         }
-        if(score >= 1000*(10*level*level+1)) {
-            score_mod += level*level;
-            level++;
-        }
+
+		level_inc(score, &score_mod, &level);
     }
-    write_tetr(win, curr_tetr);
-    wrefresh(win);
 }
 
-void scr_prep()
-{
-	initscr();
-	cbreak();
-	start_color();
-	keypad(stdscr, 1);
-	noecho();
-	curs_set(0);
-    refresh();
-}
-
-void scr_rest()
-{
-	curs_set(1);
-	echo();
-	nocbreak();
-	endwin();
-}
-
-void quit(int errc)
-{
-    scr_rest();
-    exit(errc);
-}
 

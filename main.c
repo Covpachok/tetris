@@ -3,6 +3,7 @@
 #include <time.h>
 
 #include "tetris.h"
+#include "etc.h"
 
 int main()
 {

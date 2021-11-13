@@ -323,13 +323,25 @@ static void init_game_field(scr_type *f)
             (*f)[i][j] = 0;
 }
 
-static void init_tetris_win(WINDOW **win, int sm_h, int sm_w)
+static void
+init_tetris_wins(WINDOW **mwin, WINDOW **ntwin, WINDOW **swin,
+		int sm_h, int sm_w)
 {
-    *win = newwin(border_h, border_w,
+    *mwin = newwin(border_h, border_w,
             (sm_h - border_h)/2,
             (sm_w - border_w)/2);
-    box(*win, 0, 0);
-    wrefresh(*win);
+    box(*mwin, 0, 0);
+    wrefresh(*mwin);
+    *ntwin = newwin(nt_win_h, nt_win_w,
+            (sm_h - border_h)/2,
+            (sm_w + border_w)/2);
+	box(*ntwin, 0, 0);
+	wrefresh(*ntwin);
+    *swin = newwin(sc_win_h, sc_win_w,
+            (sm_h - nt_win_h - 4)/2,
+            (sm_w + border_w)/2);
+	box(*swin, 0, 0);
+	wrefresh(*swin);
 }  
 
 static void fall_delay(int *n)
@@ -382,9 +394,39 @@ static void level_inc(long score, int *smod, int *lvl)
 	} 
 }
 
+static void write_next_tetr(WINDOW *ntwin, tetromino_type t)
+{
+	tetromino_type temp;
+	temp = t;
+	temp.pos.x -= 2;
+	temp.pos.y += 1;
+	write_tetr(ntwin, temp);
+}
+
+static void erase_next_tetr(WINDOW *ntwin, tetromino_type t)
+{
+	tetromino_type temp;
+	temp = t;
+	temp.pos.x -= 2;
+	temp.pos.y += 1;
+	erase_tetr(ntwin, temp);
+}
+
+static void write_score(WINDOW *swin, long score, int level, int sm_h, int sm_w)
+{
+    wattrset(swin, A_BOLD);
+    mvwprintw(swin, 1, (sc_win_w-6)/2, "SCORE:");
+    mvwprintw(swin, 2, 2, "%012d", score);
+
+    mvwprintw(swin, 4, (sc_win_w-6)/2, "LEVEL:");
+    mvwprintw(swin, 5, (sc_win_w-2)/2, "%02d", level);
+
+    wattroff(swin, A_BOLD);
+}
+
 void tetris_game()
 {
-	WINDOW *win;
+	WINDOW *win, *ntwin, *swin;
 	tetromino_type curr_tetr, next_tetr;
     scr_type field;
 	int key, sm_h, sm_w, dcount,
@@ -393,7 +435,7 @@ void tetris_game()
 
 	/* initializing variables */
     getmaxyx(stdscr, sm_h, sm_w);
-    init_tetris_win(&win, sm_h, sm_w);
+    init_tetris_wins(&win, &ntwin, &swin, sm_h, sm_w);
 
     tetr_colors_init();
     timeout(0);
@@ -403,12 +445,15 @@ void tetris_game()
     tetr_init(&next_tetr, rand()%shapes_count);
     write_tetr(win, curr_tetr);
     wrefresh(win);
+	write_next_tetr(ntwin, next_tetr);
+    wrefresh(ntwin);
 
     dcount = 0;
     dflag = 0;
     score = 0;
     score_mod = 1;
     level = 0;
+
 
 	/* main game loop */
     while((key = getch()) != key_escape) {
@@ -441,8 +486,13 @@ void tetris_game()
             if(tetr_fall(&curr_tetr, field)) {
                 save_at_field(curr_tetr, &field);
                 write_tetr(win, curr_tetr);
+
+        		erase_next_tetr(ntwin, next_tetr);
                 
 				new_tetr(&curr_tetr, &next_tetr);
+
+                write_next_tetr(ntwin, next_tetr);
+    			wrefresh(ntwin);
 
 				/* score system */
 				if(score_for_flines(&field, &score, score_mod) == 1)
@@ -459,8 +509,8 @@ void tetris_game()
         mvprintw(3, 0, "delay count=%02d", dcount);
 #endif
 
-        mvprintw(0, (sm_w-16)/2, "score=%010d", score);
-        mvprintw(1, (sm_w-6)/2, "level=%d", level);
+        write_score(swin, score, level, sm_h, sm_w);
+        wrefresh(swin);
 
         write_tetr(win, curr_tetr);
         refresh();

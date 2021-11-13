@@ -1,5 +1,9 @@
 To compile, write:
-### ./comp.sh
+```
+./comp.sh
+```
 
 To run, write:
-### ./tetris
+```
+./tetris
+```
